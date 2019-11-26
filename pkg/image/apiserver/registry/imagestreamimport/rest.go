@@ -106,6 +106,7 @@ func (s *REST) NamespaceScoped() bool {
 }
 
 func (r *REST) Create(ctx context.Context, obj runtime.Object, createValidation rest.ValidateObjectFunc, options *metav1.CreateOptions) (runtime.Object, error) {
+	klog.V(1).Infof("imagestreamimport.Rest{}.Create()")
 	isi, ok := obj.(*imageapi.ImageStreamImport)
 	if !ok {
 		return nil, kapierrors.NewBadRequest(fmt.Sprintf("obj is not an ImageStreamImport: %#v", obj))
@@ -218,9 +219,15 @@ func (r *REST) Create(ctx context.Context, obj runtime.Object, createValidation 
 
 	// only load secrets if we need them
 	credentials := importer.NewLazyCredentialsForSecrets(func() ([]corev1.Secret, error) {
+		klog.V(1).Infof("credentials for: %s", isi.Name)
 		secrets, err := r.isV1Client.ImageStreams(namespace).Secrets(isi.Name, metav1.GetOptions{})
 		if err != nil {
+			klog.V(1).Infof("%v", err)
 			return nil, err
+		}
+
+		for _, s := range secrets.Items {
+			klog.V(1).Infof("namespace: %s, name: %s", s.Namespace, s.Name)
 		}
 		return secrets.Items, nil
 	})

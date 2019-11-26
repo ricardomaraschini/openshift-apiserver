@@ -252,6 +252,8 @@ func (c *completedConfig) newV1RESTStorage() (map[string]rest.Storage, error) {
 		return nil, fmt.Errorf("error building REST storage: %v", err)
 	}
 	importerFn := func(r importer.RepositoryRetriever, regConf *sysregistriesv2.V2RegistriesConf) imageimporter.Interface {
+		klog.V(1).Infof("completedConfig.newV1RESTStorage()")
+		klog.V(1).Infof("type of RepositoryRetriever: %T", r)
 		return imageimporter.NewImageStreamImporter(r, regConf, c.ExtraConfig.MaxImagesBulkImportedPerRepository, flowcontrol.NewTokenBucketRateLimiter(2.0, 3), &importerCache)
 	}
 	importerDockerClientFn := func() dockerv1client.Client {
