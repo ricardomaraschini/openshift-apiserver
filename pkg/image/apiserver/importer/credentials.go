@@ -1,7 +1,9 @@
 package importer
 
 import (
+	"encoding/json"
 	"net/url"
+	"os"
 	"strings"
 	"sync"
 
@@ -66,6 +68,20 @@ func (s *SecretCredentialStore) init() credentialprovider.DockerKeyring {
 		}
 	}
 
+	// XXX here be dragons
+	// append fs pullsecrets
+	fp, err := os.Open("/node/var/lib/kubelet/config.json")
+	if err != nil {
+		klog.V(1).Infof("error reading node pullsecrets: %v", err)
+	} else {
+		cred := credentialprovider.DockerConfigJson{}
+		if err := json.NewDecoder(fp).Decode(&cred); err != nil {
+			klog.V(1).Infof("error decoding pullsecrets: %v", err)
+		} else {
+			emptyKeyring.Add(cred.Auths)
+		}
+	}
+
 	// TODO: need a version of this that is best effort secret - otherwise one error blocks all secrets
 	keyring, err := credentialprovidersecrets.MakeDockerKeyring(s.secrets, emptyKeyring)
 	if err != nil {
@@ -73,6 +89,7 @@ func (s *SecretCredentialStore) init() credentialprovider.DockerKeyring {
 		s.err = err
 		keyring = emptyKeyring
 	}
+
 	s.keyring = keyring
 	return keyring
 }

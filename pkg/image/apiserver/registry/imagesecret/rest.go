@@ -52,23 +52,24 @@ func (r *REST) Get(ctx context.Context, _ string, options runtime.Object) (runti
 		ns = metav1.NamespaceAll
 	}
 
-	// XXX CHANGEME
-	filtered := make([]coreapi.Secret, 0)
-	globalPullSecret, err := r.secrets.Secrets("openshift-config").Get(
-		"pull-secret", metav1.GetOptions{},
-	)
-	if err == nil {
-		internalSecret := &coreapi.Secret{}
-		if err := corev1conversion.Convert_v1_Secret_To_core_Secret(globalPullSecret, internalSecret, nil); err != nil {
-			return nil, err
+	/*
+		globalPullSecret, err := r.secrets.Secrets("openshift-config").Get(
+			"pull-secret", metav1.GetOptions{},
+		)
+		if err == nil {
+			internalSecret := &coreapi.Secret{}
+			if err := corev1conversion.Convert_v1_Secret_To_core_Secret(globalPullSecret, internalSecret, nil); err != nil {
+				return nil, err
+			}
+			filtered = append(filtered, *internalSecret)
 		}
-		filtered = append(filtered, *internalSecret)
-	}
+	*/
 
 	secrets, err := r.secrets.Secrets(ns).List(opts)
 	if err != nil {
 		return nil, err
 	}
+	filtered := make([]coreapi.Secret, 0, len(secrets.Items))
 	for i := range secrets.Items {
 		if secrets.Items[i].Annotations[imagev1.ExcludeImageSecretAnnotation] == "true" {
 			continue
