@@ -5,7 +5,7 @@ import (
 	"strings"
 	"sync"
 
-	v1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/klog"
 	"k8s.io/kubernetes/pkg/credentialprovider"
 	"k8s.io/kubernetes/pkg/credentialprovider/secrets"
@@ -16,12 +16,12 @@ var (
 )
 
 // secretsRetriever is a function that returns a list of kubernetes secrets.
-type secretsRetriever func() ([]v1.Secret, error)
+type secretsRetriever func() ([]corev1.Secret, error)
 
 // NewCredentialsForSecrets returns a credential store populated with a list
 // of kubernetes secrets. Secrets are filtered as SecretCredentialStore uses
 // only the ones containing docker credentials.
-func NewCredentialsForSecrets(secrets []v1.Secret) *SecretCredentialStore {
+func NewCredentialsForSecrets(secrets []corev1.Secret) *SecretCredentialStore {
 	return &SecretCredentialStore{
 		secrets: secrets,
 	}
@@ -41,7 +41,7 @@ func NewLazyCredentialsForSecrets(fn secretsRetriever) *SecretCredentialStore {
 // BasicAuth information by URL.
 type SecretCredentialStore struct {
 	lock      sync.Mutex
-	secrets   []v1.Secret
+	secrets   []corev1.Secret
 	secretsFn secretsRetriever
 	err       error
 	keyring   credentialprovider.DockerKeyring
