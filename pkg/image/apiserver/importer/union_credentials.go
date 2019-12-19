@@ -1,9 +1,7 @@
 package importer
 
 import (
-	"fmt"
 	"net/url"
-	"strings"
 
 	"github.com/openshift/library-go/pkg/image/registryclient"
 )
@@ -49,30 +47,14 @@ func (u *UnionCredentialStore) Basic(target *url.URL) (string, string) {
 
 // Err returns all errors reported by internal credential stores.
 func (u *UnionCredentialStore) Err() error {
-	merr := &MultiError{}
+	multierr := &MultiError{}
 	for _, s := range u.stores {
 		if err := s.Err(); err != nil {
-			merr.Append(err)
+			multierr.Append(err)
 		}
 	}
-	if len(merr.errs) == 0 {
+	if len(multierr.errors) == 0 {
 		return nil
 	}
-	return merr
-}
-
-type MultiError struct {
-	errors []string
-}
-
-func (m *MultiError) Append(e error) {
-	m.errors = append(m.errors, e.Error())
-}
-
-func (m *MultiError) Error() string {
-	return strings.Join(m.errors, " ")
-}
-
-func (m *MultiError) Len() int {
-	return len(m.errors)
+	return multierr
 }

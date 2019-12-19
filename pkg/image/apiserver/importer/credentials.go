@@ -192,3 +192,18 @@ func hasCanonicalPort(target *url.URL) bool {
 		return false
 	}
 }
+
+// MultiError is a wrap for multiple errors.
+type MultiError struct {
+	errors []string
+}
+
+// Append adds a new error.
+func (m *MultiError) Append(e error) {
+	m.errors = append(m.errors, e.Error())
+}
+
+// Error exists to comply with golang's error interface.
+func (m *MultiError) Error() string {
+	return strings.Join(m.errors, " ")
+}
