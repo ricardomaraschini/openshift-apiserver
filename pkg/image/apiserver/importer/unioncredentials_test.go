@@ -54,7 +54,7 @@ func TestUnionCredentialStoreBasic(t *testing.T) {
 			stores: []CredentialStore{
 				&StoreMock{
 					keyring: map[string][]string{
-						"registry0": []string{
+						"registry0": {
 							"user0",
 							"pass0",
 						},
@@ -62,7 +62,7 @@ func TestUnionCredentialStoreBasic(t *testing.T) {
 				},
 				&StoreMock{
 					keyring: map[string][]string{
-						"registry0": []string{
+						"registry0": {
 							"user1",
 							"pass1",
 						},
@@ -80,7 +80,7 @@ func TestUnionCredentialStoreBasic(t *testing.T) {
 			stores: []CredentialStore{
 				&StoreMock{
 					keyring: map[string][]string{
-						"registry0": []string{
+						"registry0": {
 							"user0",
 							"pass0",
 						},
@@ -88,7 +88,7 @@ func TestUnionCredentialStoreBasic(t *testing.T) {
 				},
 				&StoreMock{
 					keyring: map[string][]string{
-						"registry1": []string{
+						"registry1": {
 							"user1",
 							"pass1",
 						},
