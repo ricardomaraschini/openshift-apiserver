@@ -8,8 +8,9 @@ import (
 )
 
 func TestNewNodeCredentialStore(t *testing.T) {
-	if _, err := NewNodeCredentialStore(); err == nil {
-		t.Error("able to create credential store with invalid path")
+	store := NewNodeCredentialStore()
+	if store.Err() == nil {
+		t.Error("able to create with invalid docker credentials path")
 	}
 }
 
@@ -18,14 +19,14 @@ func TestBasic(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	oldDir := NodePullSecretsDir
 	NodePullSecretsDir = fmt.Sprintf("%s/test/", dir)
-	store, err := NewNodeCredentialStore()
-	if err != nil {
-		t.Fatalf("unexpected error creating credential store: %v", err)
-	}
+	store := NewNodeCredentialStore()
 	NodePullSecretsDir = oldDir
+
+	if store.Err() != nil {
+		t.Fatalf("unexpected credentials store error: %v", err)
+	}
 
 	for _, tt := range []struct {
 		name string
@@ -35,13 +36,17 @@ func TestBasic(t *testing.T) {
 	}{
 		{
 			name: "valid registry",
-			url:  &url.URL{Host: "registry0.redhat.io"},
+			url: &url.URL{
+				Host: "registry0.redhat.io",
+			},
 			user: "registry0",
 			pass: "registry0",
 		},
 		{
 			name: "invalid registry",
-			url:  &url.URL{Host: "invalidregistry.redhat.io"},
+			url: &url.URL{
+				Host: "invalidregistry.redhat.io",
+			},
 		},
 		{
 			name: "nil url",
@@ -49,11 +54,8 @@ func TestBasic(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			user, pass := store.Basic(tt.url)
-			if user != tt.user {
-				t.Errorf("invalid user for %s", user)
-			}
-			if pass != tt.pass {
-				t.Errorf("invalid user for %s", user)
+			if user != tt.user || pass != tt.pass {
+				t.Error("invalid user/pass pair")
 			}
 		})
 	}

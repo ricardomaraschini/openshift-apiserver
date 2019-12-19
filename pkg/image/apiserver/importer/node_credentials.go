@@ -3,46 +3,49 @@ package importer
 import (
 	"net/url"
 
-	"github.com/openshift/library-go/pkg/image/registryclient"
 	"k8s.io/kubernetes/pkg/credentialprovider"
 )
 
 var (
-	// NodePullSecretsDir points to the directory from where we read node pullsecrets.
+	// NodePullSecretsDir points to the directory from where to read node
+	// Docker pull secrets.
 	NodePullSecretsDir = "/node/var/lib/kubelet/"
 )
 
-// NewNodeCredentialStore returns a credential store holding content of node's pullsecrets.
-func NewNodeCredentialStore() (*NodeCredentialStore, error) {
+// NewNodeCredentialStore returns a credential store holding the content of
+// node's Docker pull secrets. If something wrong happens during the object
+// initialization an internal error is stored.
+func NewNodeCredentialStore() *NodeCredentialStore {
+	keyring := &credentialprovider.BasicDockerKeyring{}
+
 	config, err := credentialprovider.ReadDockerConfigJSONFile(
 		[]string{NodePullSecretsDir},
 	)
-	if err != nil {
-		return nil, err
+	if err == nil {
+		keyring.Add(config)
 	}
 
-	keyring := &credentialprovider.BasicDockerKeyring{}
-	keyring.Add(config)
-
 	return &NodeCredentialStore{
-		keyring:           keyring,
-		RefreshTokenStore: registryclient.NewRefreshTokenStore(),
-	}, nil
+		err:     err,
+		keyring: keyring,
+	}
 }
 
-// NodeCredentialStore holds node's pull secrets in a keyring.
+// NodeCredentialStore holds node's Docker pull secrets in an internal
+// keyring. It allows callers to query for BasicAuth information by registry
+// URL.
 type NodeCredentialStore struct {
 	keyring credentialprovider.DockerKeyring
-	registryclient.RefreshTokenStore
+	err     error
 }
 
-// Basic returns basic authentication for url. If keyring does not have credentials for the url,
-// empty strings are returned.
+// Basic returns BasicAuth information for the given url. If keyring does not
+// have credentials for the url, empty strings are returned.
 func (n *NodeCredentialStore) Basic(url *url.URL) (string, string) {
 	return basicCredentialsFromKeyring(n.keyring, url)
 }
 
-// Err returns credential store internal error.
+// Err returns NodeCredentialStore's internal error.
 func (n *NodeCredentialStore) Err() error {
-	return nil
+	return n.err
 }

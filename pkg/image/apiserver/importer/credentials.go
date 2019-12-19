@@ -5,7 +5,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/openshift/library-go/pkg/image/registryclient"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/klog"
 	"k8s.io/kubernetes/pkg/credentialprovider"
@@ -16,54 +15,56 @@ var (
 	emptyKeyring = &credentialprovider.BasicDockerKeyring{}
 )
 
-// secretsRetriever is a function capable of returning a list of kubernetes secrets. We use it when
-// the presence of the secrets within the store can be postponed.
+// secretsRetriever is a function that returns a list of kubernetes secrets.
 type secretsRetriever func() ([]v1.Secret, error)
 
-// NewCredentialsForSecrets returns a credential store populated with a list of provided kubernetes
-// secrets.
+// NewCredentialsForSecrets returns a credential store populated with a list
+// of kubernetes secrets. Secrets are filtered as SecretCredentialStore uses
+// only the ones containing docker credentials.
 func NewCredentialsForSecrets(secrets []v1.Secret) *SecretCredentialStore {
 	return &SecretCredentialStore{
-		secrets:           secrets,
-		RefreshTokenStore: registryclient.NewRefreshTokenStore(),
+		secrets: secrets,
 	}
 }
 
-// NewLazyCredentialsForSecrets returns a credential store unpopulated, secrets are retrieved on
-// demand.
+// NewLazyCredentialsForSecrets returns a credential store populated with the
+// return of fn(). The return of fn() is filtered as SecretCredentialStore uses
+// only secrets that contain docker credentials.
 func NewLazyCredentialsForSecrets(fn secretsRetriever) *SecretCredentialStore {
 	return &SecretCredentialStore{
-		secretsFn:         fn,
-		RefreshTokenStore: registryclient.NewRefreshTokenStore(),
+		secretsFn: fn,
 	}
 }
 
-// SecretCredentialStore holds docker credentials.
+// SecretCredentialStore holds docker credentials. It uses a list of secrets
+// from where it extracts docker credentials, allowing callers to retrieve
+// BasicAuth information by URL.
 type SecretCredentialStore struct {
 	lock      sync.Mutex
 	secrets   []v1.Secret
 	secretsFn secretsRetriever
 	err       error
 	keyring   credentialprovider.DockerKeyring
-
-	registryclient.RefreshTokenStore
 }
 
-// Basic returns username and password for url. If url does not exist on our internal keyrings
-// empty strings are returned.
+// Basic returns BasicAuth information for the given url (user and password).
+// If url does not exist on SecretCredentialStore's internal keyring empty
+// strings are returned.
 func (s *SecretCredentialStore) Basic(url *url.URL) (string, string) {
 	s.init()
 	return basicCredentialsFromKeyring(s.keyring, url)
 }
 
-// Err returns credential store internal error.
+// Err returns SecretCredentialStore's internal error.
 func (s *SecretCredentialStore) Err() error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	return s.err
 }
 
-// init runs only once and is reponsible for loading the internal keyring with Secrets data.
+// init runs only once and is reponsible for loading the internal keyring with
+// Secrets data (if a secretsRetriever function was specified). This function
+// initializes the internal keyring. In case of errors, internal err is set.
 func (s *SecretCredentialStore) init() {
 	s.lock.Lock()
 	defer s.lock.Unlock()
@@ -76,8 +77,8 @@ func (s *SecretCredentialStore) init() {
 		s.secrets, s.err = s.secretsFn()
 	}
 
-	// TODO: need a version of this that is best effort secret - otherwise one error blocks
-	// all secrets
+	// TODO: need a version of this that is best effort secret - otherwise
+	// one error blocks all secrets
 	keyring, err := secrets.MakeDockerKeyring(s.secrets, emptyKeyring)
 	if err != nil {
 		klog.V(5).Infof("Loading keyring failed for credential store: %v", err)
@@ -87,8 +88,9 @@ func (s *SecretCredentialStore) init() {
 	s.keyring = keyring
 }
 
-// basicCredentialsFromKeyring returns username and password if found in keyring. If URL is not
-// present, empty strings are returned instead.
+// basicCredentialsFromKeyring extract basicAuth information from provided
+// keyring. If keyring does not contain information for the provided UR, empty
+// strings are returned instead.
 func basicCredentialsFromKeyring(keyring credentialprovider.DockerKeyring, target *url.URL) (string, string) {
 	value := getURLForLookup(target)
 	if configs, found := keyring.Lookup(value); found {
@@ -99,8 +101,8 @@ func basicCredentialsFromKeyring(keyring credentialprovider.DockerKeyring, targe
 		return configs[0].Username, configs[0].Password
 	}
 
-	// do a special case check for docker.io to match historical lookups when we respond to a
-	// challenge
+	// do a special case check for docker.io to match historical lookups
+	// when we respond to a challenge
 	if value == "auth.docker.io/token" {
 		klog.V(5).Infof(
 			"Being asked for %s (%s), trying %s, legacy behavior",
@@ -146,7 +148,8 @@ func basicCredentialsFromKeyring(keyring credentialprovider.DockerKeyring, targe
 	return "", ""
 }
 
-// getURLForLookup returns the URL we should use when looking for credentials on a keyring.
+// getURLForLookup returns the URL we should use when looking for credentials
+// on a keyring.
 func getURLForLookup(target *url.URL) string {
 	var res string
 	if target == nil {
@@ -164,8 +167,9 @@ func getURLForLookup(target *url.URL) string {
 		}
 	}
 
-	// Lookup(...) expects an image (not a URL path). The keyring strips /v1/ and /v2/ version
-	// prefixes so we should do the same when selecting a valid auth for a URL.
+	// Lookup(...) expects an image (not a URL path). The keyring strips
+	// /v1/ and /v2/ version prefixes so we should do the same when
+	// selecting a valid auth for a URL.
 	pathWithSlash := target.Path + "/"
 	if strings.HasPrefix(pathWithSlash, "/v1/") || strings.HasPrefix(pathWithSlash, "/v2/") {
 		res = target.Host + target.Path[3:]
@@ -174,18 +178,17 @@ func getURLForLookup(target *url.URL) string {
 	return res
 }
 
-// hasCanonicalPort returns if port is specified on the url and is the default port for the
-// protocol.
+// hasCanonicalPort returns if port is specified on the url and is the default
+// port for the protocol.
 func hasCanonicalPort(target *url.URL) bool {
-	if target == nil {
+	switch {
+	case target == nil:
+		return false
+	case strings.HasSuffix(target.Host, ":443") && target.Scheme == "https":
+		return true
+	case strings.HasSuffix(target.Host, ":80") && target.Scheme == "http":
+		return true
+	default:
 		return false
 	}
-
-	if strings.HasSuffix(target.Host, ":443") && target.Scheme == "https" {
-		return true
-	}
-	if strings.HasSuffix(target.Host, ":80") && target.Scheme == "http" {
-		return true
-	}
-	return false
 }
