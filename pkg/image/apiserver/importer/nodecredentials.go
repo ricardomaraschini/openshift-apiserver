@@ -3,6 +3,7 @@ package importer
 import (
 	"net/url"
 
+	"github.com/openshift/library-go/pkg/image/registryclient"
 	"k8s.io/kubernetes/pkg/credentialprovider"
 )
 
@@ -26,8 +27,9 @@ func NewNodeCredentialStore() *NodeCredentialStore {
 	}
 
 	return &NodeCredentialStore{
-		err:     err,
-		keyring: keyring,
+		err:               err,
+		keyring:           keyring,
+		RefreshTokenStore: registryclient.NewRefreshTokenStore(),
 	}
 }
 
@@ -37,6 +39,7 @@ func NewNodeCredentialStore() *NodeCredentialStore {
 type NodeCredentialStore struct {
 	keyring credentialprovider.DockerKeyring
 	err     error
+	registryclient.RefreshTokenStore
 }
 
 // Basic returns BasicAuth information for the given url. If keyring does not

@@ -5,6 +5,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/openshift/library-go/pkg/image/registryclient"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/klog"
 	"k8s.io/kubernetes/pkg/credentialprovider"
@@ -32,7 +33,8 @@ func NewCredentialsForSecrets(secrets []corev1.Secret) *SecretCredentialStore {
 // only secrets that contain docker credentials.
 func NewLazyCredentialsForSecrets(fn secretsRetriever) *SecretCredentialStore {
 	return &SecretCredentialStore{
-		secretsFn: fn,
+		secretsFn:         fn,
+		RefreshTokenStore: registryclient.NewRefreshTokenStore(),
 	}
 }
 
@@ -45,6 +47,7 @@ type SecretCredentialStore struct {
 	secretsFn secretsRetriever
 	err       error
 	keyring   credentialprovider.DockerKeyring
+	registryclient.RefreshTokenStore
 }
 
 // Basic returns BasicAuth information for the given url (user and password).

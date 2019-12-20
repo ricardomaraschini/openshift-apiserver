@@ -216,7 +216,7 @@ func (r *REST) Create(ctx context.Context, obj runtime.Object, createValidation 
 		v2regConf.Registries[i].Prefix = reg.Location
 	}
 
-	credentials := importer.NewUnionCredentialStore(
+	credentials := importer.NewMultiCredentialStore(
 		importer.NewLazyCredentialsForSecrets(func() ([]corev1.Secret, error) {
 			secrets, err := r.isV1Client.ImageStreams(namespace).Secrets(
 				isi.Name, metav1.GetOptions{},
@@ -227,35 +227,40 @@ func (r *REST) Create(ctx context.Context, obj runtime.Object, createValidation 
 			return secrets.Items, nil
 		}),
 		importer.NewNodeCredentialStore(),
+		registryclient.NoCredentials,
 	)
 
+	var imageStatus []metav1.Status
 	importCtx := registryclient.NewContext(r.transport, r.insecureTransport).WithCredentials(credentials)
 	imports := r.importFn(importCtx, v2regConf)
-	if err := imports.Import(ctx.(gocontext.Context), isi, stream); err != nil {
-		return nil, kapierrors.NewInternalError(err)
-	}
 
-	// check imported images status. If we get authentication error (401), try import same image without authentication.
-	// container image registry gives 401 on public images if you have wrong secret in your secret list.
-	// this block was introduced by PR #18012
-	// TODO: remove this blocks when smarter auth client gets done with retries
-	var imageStatus []metav1.Status
-	importFailed := false
-	for _, image := range isi.Status.Images {
-		//cache all imports status
-		imageStatus = append(imageStatus, image.Status)
-		if image.Status.Reason == metav1.StatusReasonUnauthorized && strings.Contains(strings.ToLower(image.Status.Message), "username or password") {
-			importFailed = true
-		}
-	}
-	// try import IS without auth if it failed before
-	if importFailed {
-		importCtx := registryclient.NewContext(r.transport, r.insecureTransport).WithCredentials(nil)
-		imports := r.importFn(importCtx, v2regConf)
+	for i := 0; i < credentials.Len(); i++ {
 		if err := imports.Import(ctx.(gocontext.Context), isi, stream); err != nil {
 			return nil, kapierrors.NewInternalError(err)
 		}
+
+		importFailed := false
+		for _, image := range isi.Status.Images {
+			//cache all imports status
+			imageStatus = append(imageStatus, image.Status)
+			if image.Status.Reason == metav1.StatusReasonUnauthorized && strings.Contains(strings.ToLower(image.Status.Message), "username or password") {
+				importFailed = true
+			}
+			// XXX
+			if strings.Contains(strings.ToLower(image.Status.Message), "unauthorized") {
+				importFailed = true
+			}
+		}
+
+		if importFailed {
+			// use the next credential store and try again.
+			credentials.Next()
+			continue
+		}
+
+		break
 	}
+
 	//cycle through status and set old messages so not to confuse users
 	for key, image := range isi.Status.Images {
 		if image.Status.Reason == metav1.StatusReasonUnauthorized {
