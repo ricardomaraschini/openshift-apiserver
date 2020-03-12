@@ -13,6 +13,7 @@ import (
 
 	"k8s.io/klog"
 
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
@@ -29,7 +30,6 @@ import (
 	imagev1client "github.com/openshift/client-go/image/clientset/versioned"
 	operatorinformers "github.com/openshift/client-go/operator/informers/externalversions"
 	"github.com/openshift/openshift-apiserver/pkg/image/apis/image/validation/whitelist"
-	"github.com/openshift/openshift-apiserver/pkg/image/apiserver/importer"
 	imageimporter "github.com/openshift/openshift-apiserver/pkg/image/apiserver/importer"
 	"github.com/openshift/openshift-apiserver/pkg/image/apiserver/importer/dockerv1client"
 	"github.com/openshift/openshift-apiserver/pkg/image/apiserver/registry/image"
@@ -253,12 +253,13 @@ func (c *completedConfig) newV1RESTStorage() (map[string]rest.Storage, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error building REST storage: %v", err)
 	}
-	importerFn := func(r importer.RepositoryRetriever, regConf *sysregistriesv2.V2RegistriesConf) imageimporter.Interface {
-		return imageimporter.NewImageStreamImporter(r, regConf, c.ExtraConfig.MaxImagesBulkImportedPerRepository, flowcontrol.NewTokenBucketRateLimiter(2.0, 3), &importerCache)
+	importerFn := func(secs []corev1.Secret, regConf *sysregistriesv2.V2RegistriesConf) imageimporter.Interface {
+		return imageimporter.NewImageStreamImporter(secs, regConf, c.ExtraConfig.MaxImagesBulkImportedPerRepository, flowcontrol.NewTokenBucketRateLimiter(2.0, 3), &importerCache)
 	}
 	importerDockerClientFn := func() dockerv1client.Client {
 		return dockerv1client.NewClient(20*time.Second, false)
 	}
+
 	imageStreamImportStorage := imagestreamimport.NewREST(
 		importerFn,
 		imageStreamRegistry,

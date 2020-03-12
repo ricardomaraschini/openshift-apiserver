@@ -2,6 +2,7 @@ package importer
 
 import (
 	"fmt"
+	"net/http"
 	"net/url"
 	"runtime"
 	"strings"
@@ -13,22 +14,30 @@ import (
 	"github.com/docker/distribution/reference"
 	"github.com/docker/distribution/registry/api/errcode"
 	v2 "github.com/docker/distribution/registry/api/v2"
+	"github.com/docker/distribution/registry/client/auth"
+	dockertypes "github.com/docker/docker/api/types"
+	dockerregistry "github.com/docker/docker/registry"
 	godigest "github.com/opencontainers/go-digest"
 	gocontext "golang.org/x/net/context"
 
+	corev1 "k8s.io/api/core/v1"
 	kapierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/validation/field"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/util/flowcontrol"
 	"k8s.io/klog"
+	"k8s.io/kubernetes/pkg/credentialprovider"
+	"k8s.io/kubernetes/pkg/credentialprovider/secrets"
 
 	"github.com/openshift/api/image"
 	imagev1 "github.com/openshift/api/image/v1"
 	"github.com/openshift/library-go/pkg/image/imageutil"
 	imageref "github.com/openshift/library-go/pkg/image/reference"
+	"github.com/openshift/library-go/pkg/image/registryclient"
 	imageapi "github.com/openshift/openshift-apiserver/pkg/image/apis/image"
 	"github.com/openshift/openshift-apiserver/pkg/image/apiserver/importer/dockerv1client"
 	"github.com/openshift/openshift-apiserver/pkg/image/apiserver/internalimageutil"
@@ -55,9 +64,9 @@ type RepositoryRetriever interface {
 type ImageStreamImporter struct {
 	maximumTagsPerRepo int
 
-	retriever RepositoryRetriever
-	limiter   flowcontrol.RateLimiter
-	regConf   *sysregistriesv2.V2RegistriesConf
+	secrets []corev1.Secret
+	limiter flowcontrol.RateLimiter
+	regConf *sysregistriesv2.V2RegistriesConf
 
 	digestToRepositoryCache map[gocontext.Context]map[manifestKey]*imageapi.Image
 
@@ -67,7 +76,7 @@ type ImageStreamImporter struct {
 
 // NewImageStreamImport creates an importer that will load images from a remote container image registry into an
 // ImageStreamImport object. Limiter may be nil.
-func NewImageStreamImporter(retriever RepositoryRetriever, regConf *sysregistriesv2.V2RegistriesConf, maximumTagsPerRepo int, limiter flowcontrol.RateLimiter, cache *ImageStreamLayerCache) *ImageStreamImporter {
+func NewImageStreamImporter(secrets []corev1.Secret, regConf *sysregistriesv2.V2RegistriesConf, maximumTagsPerRepo int, limiter flowcontrol.RateLimiter, cache *ImageStreamLayerCache) *ImageStreamImporter {
 	if limiter == nil {
 		limiter = flowcontrol.NewFakeAlwaysRateLimiter()
 	}
@@ -77,13 +86,53 @@ func NewImageStreamImporter(retriever RepositoryRetriever, regConf *sysregistrie
 	return &ImageStreamImporter{
 		maximumTagsPerRepo: maximumTagsPerRepo,
 
-		retriever: retriever,
-		limiter:   limiter,
-		regConf:   regConf,
+		secrets: secrets,
+		limiter: limiter,
+		regConf: regConf,
 
 		digestToRepositoryCache: make(map[gocontext.Context]map[manifestKey]*imageapi.Image),
 		digestToLayerSizeCache:  cache,
 	}
+}
+
+// getImportContext returns a repository retriever containing credentials to
+// fetch provided docker image reference.
+func (i *ImageStreamImporter) getImportContext(ref imageapi.DockerImageReference) (RepositoryRetriever, error) {
+	installKeyring := &credentialprovider.BasicDockerKeyring{}
+
+	if config, err := credentialprovider.ReadDockerConfigJSONFile(
+		[]string{"/var/lib/kubelet/"},
+	); err != nil {
+		klog.V(5).Infof("proceeding without node credentials: %v", err)
+	} else {
+		installKeyring.Add(config)
+	}
+
+	keyring, err := secrets.MakeDockerKeyring(i.secrets, installKeyring)
+	if err != nil {
+		return nil, err
+	}
+
+	var cred auth.CredentialStore
+	if auths, _ := keyring.Lookup(ref.String()); len(auths) > 0 {
+		cred = dockerregistry.NewStaticCredentialStore(&dockertypes.AuthConfig{
+			Username: auths[0].Username,
+			Password: auths[0].Password,
+		})
+	}
+
+	insecureTransport, err := rest.TransportFor(&rest.Config{
+		TLSClientConfig: rest.TLSClientConfig{
+			Insecure: true,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return registryclient.NewContext(
+		http.DefaultTransport, insecureTransport,
+	).WithCredentials(cred), nil
 }
 
 // Import tries to complete the provided isi object with images loaded from remote registries.
@@ -101,14 +150,14 @@ func (i *ImageStreamImporter) Import(ctx gocontext.Context, isi *imageapi.ImageS
 		i.digestToRepositoryCache[ctx] = make(map[manifestKey]*imageapi.Image)
 	}
 
-	i.importImages(ctx, i.retriever, isi, stream, i.limiter)
-	i.importFromRepository(ctx, i.retriever, isi, i.maximumTagsPerRepo, i.limiter)
+	i.importImages(ctx, isi, stream, i.limiter)
+	i.importFromRepository(ctx, isi, i.maximumTagsPerRepo, i.limiter)
 	return nil
 }
 
 // importImages updates the passed ImageStreamImport object and sets Status for each image based on whether the import
 // succeeded or failed. Cache is updated with any loaded images. Limiter is optional and controls how fast images are updated.
-func (i *ImageStreamImporter) importImages(ctx gocontext.Context, retriever RepositoryRetriever, isi *imageapi.ImageStreamImport, stream *imageapi.ImageStream, limiter flowcontrol.RateLimiter) {
+func (i *ImageStreamImporter) importImages(ctx gocontext.Context, isi *imageapi.ImageStreamImport, stream *imageapi.ImageStream, limiter flowcontrol.RateLimiter) {
 	tags := make(map[manifestKey][]int)
 	ids := make(map[manifestKey][]int)
 	repositories := make(map[repositoryKey]*importRepository)
@@ -190,6 +239,12 @@ func (i *ImageStreamImporter) importImages(ctx gocontext.Context, retriever Repo
 
 	// for each repository we found, import all tags and digests
 	for key, repo := range repositories {
+		// XXX do not ignore this error
+		retriever, err := i.getImportContext(repo.Ref)
+		if err != nil {
+			continue
+		}
+
 		i.importRepositoryFromDocker(ctx, retriever, repo, limiter)
 		for _, tag := range repo.Tags {
 			j := manifestKey{repositoryKey: key, preferArch: tag.PreferArch, preferOS: tag.PreferOS}
@@ -238,7 +293,7 @@ func (i *ImageStreamImporter) importImages(ctx gocontext.Context, retriever Repo
 // importFromRepository imports the repository named on the ImageStreamImport, if any, importing up to maximumTags, and reporting
 // status on each image that is attempted to be imported. If the repository cannot be found or tags cannot be retrieved, the repository
 // status field is set.
-func (i *ImageStreamImporter) importFromRepository(ctx gocontext.Context, retriever RepositoryRetriever, isi *imageapi.ImageStreamImport, maximumTags int, limiter flowcontrol.RateLimiter) {
+func (i *ImageStreamImporter) importFromRepository(ctx gocontext.Context, isi *imageapi.ImageStreamImport, maximumTags int, limiter flowcontrol.RateLimiter) {
 	if isi.Spec.Repository == nil {
 		return
 	}
@@ -278,6 +333,12 @@ func (i *ImageStreamImporter) importFromRepository(ctx gocontext.Context, retrie
 		Name:        key.name,
 		Insecure:    spec.ImportPolicy.Insecure,
 		MaximumTags: maximumTags,
+	}
+
+	retriever, err := i.getImportContext(repo.Ref)
+	if err != nil {
+		status.Status = imageImportStatus(err, "", "repository")
+		return
 	}
 	i.importRepositoryFromDocker(ctx, retriever, repo, limiter)
 
