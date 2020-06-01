@@ -114,6 +114,36 @@ func (iptr *ImageStreamImporter) Import(ctx context.Context, isi *imageapi.Image
 	return nil
 }
 
+// allowRegistryInsecureAccess returns true if access to image may be done insecurely (ignoring
+// invalid certificate). Returns true if either global registries configuration (regConf) or
+// image specific policy is true.
+func (iptr *ImageStreamImporter) allowRegistryInsecureAccess(
+	policy imageapi.TagImportPolicy, ref imageapi.DockerImageReference,
+) bool {
+	if iptr.regConf == nil {
+		return policy.Insecure
+	}
+	for _, reg := range iptr.regConf.Registries {
+		if reg.Location == ref.Registry {
+			return policy.Insecure || reg.Insecure
+		}
+	}
+	return policy.Insecure
+}
+
+// blockedRegistry returns if registry hosting the image to be imported has been blocked.
+func (iptr *ImageStreamImporter) blockedRegistry(ref imageapi.DockerImageReference) bool {
+	if iptr.regConf == nil {
+		return false
+	}
+	for _, reg := range iptr.regConf.Registries {
+		if reg.Location == ref.Registry {
+			return reg.Blocked
+		}
+	}
+	return false
+}
+
 // importImages updates the passed ImageStreamImport object and sets Status for each image based on
 // whether the import succeeded or failed. Cache is updated with any loaded images.
 func (iptr *ImageStreamImporter) importImages(ctx context.Context, isi *imageapi.ImageStreamImport, stream *imageapi.ImageStream) {
@@ -144,6 +174,14 @@ func (iptr *ImageStreamImporter) importImages(ctx context.Context, isi *imageapi
 		} else {
 			ref = imageapi.DockerImageReference{Name: from.Name}
 		}
+
+		if iptr.blockedRegistry(ref) {
+			isi.Status.Images[i].Status = forbiddenStatus(
+				fmt.Errorf("registry %s blocked", ref.Registry),
+			)
+			continue
+		}
+
 		defaultRef := ref.DockerClientDefaults()
 		repoName := defaultRef.RepositoryName()
 		registryURL := defaultRef.RegistryURL()
@@ -155,7 +193,7 @@ func (iptr *ImageStreamImporter) importImages(ctx context.Context, isi *imageapi
 				Ref:      ref,
 				Registry: &key.url,
 				Name:     key.name,
-				Insecure: spec.ImportPolicy.Insecure,
+				Insecure: iptr.allowRegistryInsecureAccess(spec.ImportPolicy, ref),
 			}
 			repositories[key] = repo
 		}
@@ -276,6 +314,11 @@ func (iptr *ImageStreamImporter) importFromRepository(ctx context.Context, isi *
 		ref = imageapi.DockerImageReference{Name: from.Name}
 	}
 
+	if iptr.blockedRegistry(ref) {
+		status.Status = forbiddenStatus(fmt.Errorf("registry %s blocked", ref.Registry))
+		return
+	}
+
 	defaultRef := ref.DockerClientDefaults()
 	repoName := defaultRef.RepositoryName()
 	registryURL := defaultRef.RegistryURL()
@@ -285,7 +328,7 @@ func (iptr *ImageStreamImporter) importFromRepository(ctx context.Context, isi *
 		Ref:         ref,
 		Registry:    &key.url,
 		Name:        key.name,
-		Insecure:    spec.ImportPolicy.Insecure,
+		Insecure:    iptr.allowRegistryInsecureAccess(spec.ImportPolicy, ref),
 		MaximumTags: iptr.maximumTagsPerRepo,
 	}
 	iptr.importRepositoryFromDocker(ctx, repo)
@@ -925,4 +968,8 @@ func setImageImportStatus(images *imageapi.ImageStreamImport, i int, tag string,
 
 func invalidStatus(position string, errs ...*field.Error) metav1.Status {
 	return kapierrors.NewInvalid(schema.GroupKind{Group: "", Kind: ""}, position, errs).ErrStatus
+}
+
+func forbiddenStatus(err error) metav1.Status {
+	return kapierrors.NewForbidden(schema.GroupResource{Group: "", Resource: ""}, "", err).ErrStatus
 }
