@@ -142,6 +142,7 @@ func createHandler(r rest.NamedCreater, scope *RequestScope, admit admission.Int
 		trace.Step("About to store object in database")
 		admissionAttributes := admission.NewAttributesRecord(obj, nil, scope.Kind, namespace, name, scope.Resource, scope.Subresource, admission.Create, options, dryrun.IsDryRun(options.DryRun), userInfo)
 		requestFunc := func() (runtime.Object, error) {
+			fmt.Printf("RICARDO: addr(%p) creating object of type: %v\n", ctx, obj.GetObjectKind())
 			return r.Create(
 				ctx,
 				name,

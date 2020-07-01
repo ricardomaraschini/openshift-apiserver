@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"os"
 	"runtime"
 	"strings"
 
@@ -104,6 +105,14 @@ func (iptr *ImageStreamImporter) Import(ctx context.Context, isi *imageapi.Image
 		}
 		iptr.digestToLayerSizeCache = &cache
 	}
+
+	hn, _ := os.Hostname()
+	x := 0
+	for range iptr.digestToRepositoryCache {
+		x++
+	}
+	fmt.Printf("RICARDO: %d digestToRepositoryCache on %s\n", x, hn)
+
 	// Initialize the image cache entry for a context.
 	if _, ok := iptr.digestToRepositoryCache[ctx]; !ok {
 		iptr.digestToRepositoryCache[ctx] = make(map[manifestKey]*imageapi.Image)
