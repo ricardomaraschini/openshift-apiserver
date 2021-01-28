@@ -326,6 +326,8 @@ type TagEvent struct {
 	DockerImageReference string
 	// The image
 	Image string
+	// Holds references for multiple images if the Tag points to a ManifestList
+	Images []string
 	// Generation is the spec tag generation that resulted in this tag being updated
 	Generation int64
 }

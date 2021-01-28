@@ -339,7 +339,27 @@ func tagsChanged(new, old []imageapi.TagEvent) (changed bool, deleted bool) {
 	case len(old) == 0:
 		return true, false
 	default:
-		return new[0] != old[0], false
+		if !new[0].Created.Equal(&old[0].Created) {
+			return true, false
+		}
+		if new[0].DockerImageReference != old[0].DockerImageReference {
+			return true, false
+		}
+		if new[0].Image != old[0].Image {
+			return true, false
+		}
+		if new[0].Generation != old[0].Generation {
+			return true, false
+		}
+		if len(new[0].Images) != len(old[0].Images) {
+			return true, false
+		}
+		for i, nval := range new[0].Images {
+			if nval != old[0].Images[i] {
+				return true, false
+			}
+		}
+		return false, false
 	}
 }
 
