@@ -120,6 +120,7 @@ API rule violation: list_type_missing,github.com/openshift/api/config/v1,feature
 API rule violation: list_type_missing,github.com/openshift/api/config/v1,featureSetBuilder,forceOn
 API rule violation: list_type_missing,github.com/openshift/api/helm/v1beta1,HelmChartRepositoryStatus,Conditions
 API rule violation: list_type_missing,github.com/openshift/api/image/v1,Image,DockerImageLayers
+API rule violation: list_type_missing,github.com/openshift/api/image/v1,Image,DockerImageManifests
 API rule violation: list_type_missing,github.com/openshift/api/image/v1,Image,DockerImageSignatures
 API rule violation: list_type_missing,github.com/openshift/api/image/v1,Image,Signatures
 API rule violation: list_type_missing,github.com/openshift/api/image/v1,ImageBlobReferences,Layers
@@ -225,6 +226,7 @@ API rule violation: list_type_missing,github.com/openshift/api/openshiftcontrolp
 API rule violation: list_type_missing,github.com/openshift/api/openshiftcontrolplane/v1,OpenShiftControllerManagerConfig,Controllers
 API rule violation: list_type_missing,github.com/openshift/api/openshiftcontrolplane/v1,ServiceAccountControllerConfig,ManagedNames
 API rule violation: list_type_missing,github.com/openshift/api/operator/v1,AccessLogging,HTTPCaptureCookies
+API rule violation: list_type_missing,github.com/openshift/api/operator/v1,ConsoleSpec,Plugins
 API rule violation: list_type_missing,github.com/openshift/api/operator/v1,DNSSpec,Servers
 API rule violation: list_type_missing,github.com/openshift/api/operator/v1,DNSStatus,Conditions
 API rule violation: list_type_missing,github.com/openshift/api/operator/v1,DeveloperConsoleCatalogCategory,Subcategories
@@ -746,6 +748,7 @@ API rule violation: names_match,github.com/openshift/api/image/v1,DockerImageRef
 API rule violation: names_match,github.com/openshift/api/image/v1,DockerImageReference,Tag
 API rule violation: names_match,github.com/openshift/api/image/v1,ImageLayer,LayerSize
 API rule violation: names_match,github.com/openshift/api/image/v1,ImageLayerData,LayerSize
+API rule violation: names_match,github.com/openshift/api/image/v1,ImageManifest,ManifestSize
 API rule violation: names_match,github.com/openshift/api/kubecontrolplane/v1,KubeAPIServerConfig,OAuthConfig
 API rule violation: names_match,github.com/openshift/api/kubecontrolplane/v1,MasterAuthConfig,OAuthMetadataFile
 API rule violation: names_match,github.com/openshift/api/legacyconfig/v1,ActiveDirectoryConfig,AllUsersQuery

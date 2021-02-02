@@ -65,6 +65,20 @@ func Convert_image_Image_To_v1_Image(in *newer.Image, out *v1.Image, s conversio
 		out.DockerImageLayers = nil
 	}
 
+	if in.DockerImageManifests != nil {
+		out.DockerImageManifests = make([]v1.ImageManifest, len(in.DockerImageManifests))
+		for i := range in.DockerImageManifests {
+			out.DockerImageManifests[i].Digest = in.DockerImageManifests[i].Digest
+			out.DockerImageManifests[i].MediaType = in.DockerImageManifests[i].MediaType
+			out.DockerImageManifests[i].ManifestSize = in.DockerImageManifests[i].ManifestSize
+			out.DockerImageManifests[i].Platform.Architecture = in.DockerImageManifests[i].Platform.Architecture
+			out.DockerImageManifests[i].Platform.OS = in.DockerImageManifests[i].Platform.Architecture
+			out.DockerImageManifests[i].Platform.Variant = in.DockerImageManifests[i].Platform.Architecture
+		}
+	} else {
+		out.DockerImageManifests = nil
+	}
+
 	if in.Signatures != nil {
 		out.Signatures = make([]v1.ImageSignature, len(in.Signatures))
 		for i := range in.Signatures {
@@ -121,6 +135,20 @@ func Convert_v1_Image_To_image_Image(in *v1.Image, out *newer.Image, s conversio
 		}
 	} else {
 		out.DockerImageLayers = nil
+	}
+
+	if in.DockerImageManifests != nil {
+		out.DockerImageManifests = make([]newer.ImageManifest, len(in.DockerImageManifests))
+		for i := range in.DockerImageManifests {
+			out.DockerImageManifests[i].Digest = in.DockerImageManifests[i].Digest
+			out.DockerImageManifests[i].MediaType = in.DockerImageManifests[i].MediaType
+			out.DockerImageManifests[i].ManifestSize = in.DockerImageManifests[i].ManifestSize
+			out.DockerImageManifests[i].Platform.Architecture = in.DockerImageManifests[i].Platform.Architecture
+			out.DockerImageManifests[i].Platform.OS = in.DockerImageManifests[i].Platform.Architecture
+			out.DockerImageManifests[i].Platform.Variant = in.DockerImageManifests[i].Platform.Architecture
+		}
+	} else {
+		out.DockerImageManifests = nil
 	}
 
 	if in.Signatures != nil {

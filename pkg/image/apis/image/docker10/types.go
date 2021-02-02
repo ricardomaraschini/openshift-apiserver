@@ -38,6 +38,9 @@ type DockerImageManifest struct {
 	// schema2
 	Layers []Descriptor `json:"layers"`
 	Config Descriptor   `json:"config"`
+
+	// manifestlist
+	Manifests []Descriptor `json:"manifests,omitempty"`
 }
 
 // DockerFSLayer is a container struct for BlobSums defined in an image manifest

@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/docker/distribution"
+	"github.com/docker/distribution/manifest/manifestlist"
 	"github.com/docker/distribution/manifest/schema1"
 	"github.com/docker/distribution/registry/api/errcode"
 	godigest "github.com/opencontainers/go-digest"
@@ -50,6 +51,37 @@ func schema1ToImage(manifest *schema1.SignedManifest, d godigest.Digest) (*image
 		DockerImageMetadataVersion:   "1.0",
 	}
 
+	return image, nil
+}
+
+func manifestListToImage(manifest *manifestlist.DeserializedManifestList, d godigest.Digest) (*imageapi.Image, error) {
+	mediatype, payload, err := manifest.Payload()
+	if err != nil {
+		return nil, err
+	}
+
+	image := &imageapi.Image{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: godigest.FromBytes(payload).String(),
+		},
+		DockerImageManifest:          string(payload),
+		DockerImageManifestMediaType: mediatype,
+		DockerImageMetadataVersion:   "1.0",
+	}
+
+	image.DockerImageManifests = make([]imageapi.ImageManifest, len(manifest.Manifests))
+	for i, m := range manifest.Manifests {
+		image.DockerImageManifests[i] = imageapi.ImageManifest{
+			Digest:       m.Digest.String(),
+			MediaType:    m.MediaType,
+			ManifestSize: m.Size,
+			Platform: imageapi.ManifestPlatform{
+				Architecture: m.Platform.Architecture,
+				OS:           m.Platform.OS,
+				Variant:      m.Platform.OSVersion,
+			},
+		}
+	}
 	return image, nil
 }
 

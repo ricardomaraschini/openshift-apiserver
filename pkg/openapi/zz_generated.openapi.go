@@ -303,6 +303,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"github.com/openshift/api/image/v1.ImageLayerData":                                                schema_openshift_api_image_v1_ImageLayerData(ref),
 		"github.com/openshift/api/image/v1.ImageList":                                                     schema_openshift_api_image_v1_ImageList(ref),
 		"github.com/openshift/api/image/v1.ImageLookupPolicy":                                             schema_openshift_api_image_v1_ImageLookupPolicy(ref),
+		"github.com/openshift/api/image/v1.ImageManifest":                                                 schema_openshift_api_image_v1_ImageManifest(ref),
 		"github.com/openshift/api/image/v1.ImageSignature":                                                schema_openshift_api_image_v1_ImageSignature(ref),
 		"github.com/openshift/api/image/v1.ImageStream":                                                   schema_openshift_api_image_v1_ImageStream(ref),
 		"github.com/openshift/api/image/v1.ImageStreamImage":                                              schema_openshift_api_image_v1_ImageStreamImage(ref),
@@ -318,6 +319,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"github.com/openshift/api/image/v1.ImageStreamTagList":                                            schema_openshift_api_image_v1_ImageStreamTagList(ref),
 		"github.com/openshift/api/image/v1.ImageTag":                                                      schema_openshift_api_image_v1_ImageTag(ref),
 		"github.com/openshift/api/image/v1.ImageTagList":                                                  schema_openshift_api_image_v1_ImageTagList(ref),
+		"github.com/openshift/api/image/v1.ManifestPlatform":                                              schema_openshift_api_image_v1_ManifestPlatform(ref),
 		"github.com/openshift/api/image/v1.NamedTagEventList":                                             schema_openshift_api_image_v1_NamedTagEventList(ref),
 		"github.com/openshift/api/image/v1.RepositoryImportSpec":                                          schema_openshift_api_image_v1_RepositoryImportSpec(ref),
 		"github.com/openshift/api/image/v1.RepositoryImportStatus":                                        schema_openshift_api_image_v1_RepositoryImportStatus(ref),
@@ -13677,7 +13679,6 @@ func schema_openshift_api_config_v1_SchedulerSpec(ref common.ReferenceCallback) 
 					"profile": {
 						SchemaProps: spec.SchemaProps{
 							Description: "profile sets which scheduling profile should be set in order to configure scheduling decisions for new pods.\n\nValid values are \"LowNodeUtilization\", \"HighNodeUtilization\", \"NoScoring\" Defaults to \"LowNodeUtilization\"",
-							Default:     "",
 							Type:        []string{"string"},
 							Format:      "",
 						},
@@ -14666,12 +14667,26 @@ func schema_openshift_api_image_v1_Image(ref common.ReferenceCallback) common.Op
 							Format:      "",
 						},
 					},
+					"dockerImageManifests": {
+						SchemaProps: spec.SchemaProps{
+							Description: "DockerImageManifests holds references to other manifests pointed by this image.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: map[string]interface{}{},
+										Ref:     ref("github.com/openshift/api/image/v1.ImageManifest"),
+									},
+								},
+							},
+						},
+					},
 				},
 				Required: []string{"dockerImageLayers"},
 			},
 		},
 		Dependencies: []string{
-			"github.com/openshift/api/image/v1.ImageLayer", "github.com/openshift/api/image/v1.ImageSignature", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta", "k8s.io/apimachinery/pkg/runtime.RawExtension"},
+			"github.com/openshift/api/image/v1.ImageLayer", "github.com/openshift/api/image/v1.ImageManifest", "github.com/openshift/api/image/v1.ImageSignature", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta", "k8s.io/apimachinery/pkg/runtime.RawExtension"},
 	}
 }
 
@@ -14940,6 +14955,47 @@ func schema_openshift_api_image_v1_ImageLookupPolicy(ref common.ReferenceCallbac
 				Required: []string{"local"},
 			},
 		},
+	}
+}
+
+func schema_openshift_api_image_v1_ImageManifest(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ImageManifest represents a manifest within a ManifestList",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"digest": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"mediaType": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"platform": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("github.com/openshift/api/image/v1.ManifestPlatform"),
+						},
+					},
+					"size": {
+						SchemaProps: spec.SchemaProps{
+							Default: 0,
+							Type:    []string{"integer"},
+							Format:  "int64",
+						},
+					},
+				},
+				Required: []string{"platform", "size"},
+			},
+		},
+		Dependencies: []string{
+			"github.com/openshift/api/image/v1.ManifestPlatform"},
 	}
 }
 
@@ -15778,6 +15834,37 @@ func schema_openshift_api_image_v1_ImageTagList(ref common.ReferenceCallback) co
 		},
 		Dependencies: []string{
 			"github.com/openshift/api/image/v1.ImageTag", "k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"},
+	}
+}
+
+func schema_openshift_api_image_v1_ManifestPlatform(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "ManifestPlatform holds information about a manifest platform.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"architecture": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"os": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+					"variant": {
+						SchemaProps: spec.SchemaProps{
+							Type:   []string{"string"},
+							Format: "",
+						},
+					},
+				},
+			},
+		},
 	}
 }
 
@@ -26068,6 +26155,21 @@ func schema_openshift_api_operator_v1_ConsoleSpec(ref common.ReferenceCallback) 
 							Ref:         ref("github.com/openshift/api/operator/v1.ConsoleConfigRoute"),
 						},
 					},
+					"plugins": {
+						SchemaProps: spec.SchemaProps{
+							Description: "plugins defines a list of enabled console plugin names.",
+							Type:        []string{"array"},
+							Items: &spec.SchemaOrArray{
+								Schema: &spec.Schema{
+									SchemaProps: spec.SchemaProps{
+										Default: "",
+										Type:    []string{"string"},
+										Format:  "",
+									},
+								},
+							},
+						},
+					},
 				},
 				Required: []string{"managementState", "providers"},
 			},
@@ -29241,6 +29343,19 @@ func schema_openshift_api_operator_v1_NodeStatus(ref common.ReferenceCallback) c
 							Format:      "int32",
 						},
 					},
+					"lastFailedTime": {
+						SchemaProps: spec.SchemaProps{
+							Description: "lastFailedTime is the time the last failed revision failed the last time.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
+						},
+					},
+					"lastFailedCount": {
+						SchemaProps: spec.SchemaProps{
+							Description: "lastFailedCount is how often the last failed revision failed.",
+							Type:        []string{"integer"},
+							Format:      "int32",
+						},
+					},
 					"lastFailedRevisionErrors": {
 						SchemaProps: spec.SchemaProps{
 							Description: "lastFailedRevisionErrors is a list of the errors during the failed deployment referenced in lastFailedRevision",
@@ -29260,6 +29375,8 @@ func schema_openshift_api_operator_v1_NodeStatus(ref common.ReferenceCallback) c
 				Required: []string{"nodeName", "currentRevision"},
 			},
 		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/apis/meta/v1.Time"},
 	}
 }
 

@@ -89,6 +89,7 @@ func (s imageStrategy) PrepareForUpdate(ctx context.Context, obj, old runtime.Ob
 	newImage.DockerImageMetadata = oldImage.DockerImageMetadata
 	newImage.DockerImageMetadataVersion = oldImage.DockerImageMetadataVersion
 	newImage.DockerImageLayers = oldImage.DockerImageLayers
+	newImage.DockerImageManifests = oldImage.DockerImageManifests
 
 	if oldImage.DockerImageSignatures != nil {
 		newImage.DockerImageSignatures = make([][]byte, 0, len(oldImage.DockerImageSignatures))

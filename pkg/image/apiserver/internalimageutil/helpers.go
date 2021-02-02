@@ -73,10 +73,7 @@ func InternalImageWithMetadata(image *imageapi.Image) error {
 		}
 
 		if len(image.DockerImageConfig) == 0 {
-			return fmt.Errorf(
-				"dockerImageConfig must not be empty for manifest type %q",
-				image.DockerImageManifestMediaType,
-			)
+			break
 		}
 
 		config := dockerapi10.DockerImageConfig{}

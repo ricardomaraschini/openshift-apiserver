@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/url"
-	"runtime"
 	"strings"
 
 	"github.com/containers/image/pkg/sysregistriesv2"
@@ -603,58 +602,6 @@ func (imp *ImageStreamImporter) getManifest(
 	return nil, nil, nil, utilerrors.NewAggregate(errs)
 }
 
-func manifestFromManifestList(
-	ctx context.Context,
-	manifestList *manifestlist.DeserializedManifestList,
-	ref reference.Named,
-	s distribution.ManifestService,
-	preferArch, preferOS string,
-) (distribution.Manifest, godigest.Digest, error) {
-	if len(manifestList.Manifests) == 0 {
-		return nil, "", fmt.Errorf("no manifests in manifest list")
-	}
-
-	if preferArch == "" {
-		preferArch = runtime.GOARCH
-	}
-	if preferOS == "" {
-		preferOS = runtime.GOOS
-	}
-
-	var manifestDigest godigest.Digest
-	for _, manifestDescriptor := range manifestList.Manifests {
-		if manifestDescriptor.Platform.Architecture == preferArch && manifestDescriptor.Platform.OS == preferOS {
-			manifestDigest = manifestDescriptor.Digest
-			break
-		}
-	}
-
-	// if we couldn't match the preferred arch/os, and we couldn't match the platform's
-	// arch/os, prefer x86/linux before falling back to "first image in the manifestlist"
-	// as a last resort.
-	if manifestDigest == "" {
-		for _, manifestDescriptor := range manifestList.Manifests {
-			if manifestDescriptor.Platform.Architecture == "amd64" && manifestDescriptor.Platform.OS == "linux" {
-				manifestDigest = manifestDescriptor.Digest
-				break
-			}
-		}
-	}
-
-	if manifestDigest == "" {
-		klog.V(5).Infof("unable to find %s/%s manifest in manifest list %s, doing conservative fail by switching to the first one: %#+v", preferOS, preferArch, ref.String(), manifestList.Manifests[0])
-		manifestDigest = manifestList.Manifests[0].Digest
-	}
-
-	manifest, err := s.Get(ctx, manifestDigest)
-	if err != nil {
-		klog.V(5).Infof("unable to get %s/%s manifest by digest %q for image %s: %#v", preferOS, preferArch, manifestDigest, ref.String(), err)
-		return nil, "", err
-	}
-
-	return manifest, manifestDigest, err
-}
-
 func (imp *ImageStreamImporter) importManifest(
 	ctx context.Context,
 	manifest distribution.Manifest,
@@ -664,12 +611,6 @@ func (imp *ImageStreamImporter) importManifest(
 	b distribution.BlobStore,
 	preferArch, preferOS string,
 ) (image *imageapi.Image, err error) {
-	if manifestList, ok := manifest.(*manifestlist.DeserializedManifestList); ok {
-		manifest, d, err = manifestFromManifestList(ctx, manifestList, ref, s, preferArch, preferOS)
-		if err != nil {
-			return nil, formatRepositoryError(ref, err)
-		}
-	}
 
 	if signedManifest, isSchema1 := manifest.(*schema1.SignedManifest); isSchema1 {
 		image, err = schema1ToImage(signedManifest, d)
@@ -687,6 +628,8 @@ func (imp *ImageStreamImporter) importManifest(
 			return image, formatRepositoryError(ref, getImportConfigErr)
 		}
 		image, err = schema2OrOCIToImage(manifest, imageConfig, d)
+	} else if manifestList, ok := manifest.(*manifestlist.DeserializedManifestList); ok {
+		image, err = manifestListToImage(manifestList, d)
 	} else {
 		err = fmt.Errorf("unsupported image manifest type: %T", manifest)
 		klog.V(5).Info(err)

@@ -62,6 +62,23 @@ type Image struct {
 	DockerImageManifestMediaType string
 	// DockerImageConfig is a JSON blob that the runtime uses to set up the container. This is a part of manifest schema v2.
 	DockerImageConfig string
+	// DockerImageManifests holds references to other manifests pointed by this image.
+	DockerImageManifests []ImageManifest
+}
+
+// ImageManifest represents a manifest within a ManifestList
+type ImageManifest struct {
+	Digest       string
+	MediaType    string
+	Platform     ManifestPlatform
+	ManifestSize int64
+}
+
+// ManifestPlatform holds information about a manifest platform.
+type ManifestPlatform struct {
+	Architecture string
+	OS           string
+	Variant      string
 }
 
 // ImageLayer represents a single layer of the image. Some images may have multiple layers. Some may have none.
